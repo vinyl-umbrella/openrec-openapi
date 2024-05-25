@@ -1,0 +1,1377 @@
+openapi: 3.0.0
+
+info:
+  title: OPENREC.tv API
+  version: 0.0.1
+  description: |
+    ## 概要
+    OPENREC.tv API についてまとめます．
+    よく使用すると思われるものだけを列挙しています．
+
+    ### Public API と Auth API について
+    OPENREC.tv では，大きく分けて 2 種類の API が提供されています．
+    - Public API
+      - 認証なしで利用できる API です．
+      - 一般的な情報取得や検索などに利用します．
+      - エンドポイントは，`https://public.openrec.tv/external/api/v5/*` です．
+    - Auth API
+      - 認証が必要な API です．
+      - コメントの投稿やチャンネルの登録，キャプチャのスタンプの押下などに利用できます．
+      - エンドポイントは，`https://apiv5.openrec.tv/api/v5/*` です．
+
+    ## エラーレスポンス
+
+    エラーが発生した場合、エラーを表現するオブジェクトを含んだエラーレスポンスが返却されます。このオブジェクトには、エラーの内容を説明する message プロパティと、エラーの種類を表す status プロパティで構成されます。
+
+    ```
+    {
+      "message": "VFE0094",
+      "status": -4
+    }
+    ```
+
+    ## ページネーション
+
+    一部の配列を返すAPIでは、全ての要素を一度に返すようにはなっておらず、代わりにページを指定できるようになっています。
+
+  contact:
+    name: Manuke
+    email: contact@manuke.dev
+
+servers:
+  - url: https://public.openrec.tv/external/api/v5
+    description: OPENREC.tv Public API
+
+tags:
+  - name: 認証
+    description: ログインやトークンの取得に関するエンドポイント
+  - name: 配信
+  - name: コメント
+  - name: チャンネル
+  - name: 動画
+  - name: キャプチャ
+  - name: エール
+  - name: ログイン中ユーザ
+  - name: OPENREC.tv に関する情報
+
+paths:
+  # 認証
+  /api-tv/session:
+    post:
+      summary: Cookie を取得
+      description: |
+        様々な機能で用いるcookie(`uuid`, `token`, `random`)を取得する．こちらは CORS のため，ドキュメント上では動作しません．
+      servers:
+        - url: https://www.openrec.tv
+          description: www.openrec.tv 認証関連はこちらのエンドポイントを利用します．
+      responses:
+        "200":
+          description: successful operation
+          headers:
+            Set-Cookie-UUID:
+              description: uuid, random, token が Cookie にセットされます．
+              schema:
+                type: string
+                example: uuid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx; random=XXXXXXXXXXXXXXXXXXXXX; token=123456789876423456789;
+      operationId: getSession
+      tags:
+        - 認証
+
+  /apiv5/email/login:
+    post:
+      summary: ログイン
+      description: |
+        OPENREC.tv にログインします．
+      servers:
+        - url: https://www.openrec.tv
+          description: www.openrec.tv 認証関連はこちらのエンドポイントを利用します．
+      parameters:
+        - name: uuid
+          in: cookie
+          description: 前述の `/api-tv/session` で取得した cookie を利用します．
+          required: true
+          schema:
+            type: string
+        - name: random
+          in: cookie
+          description: 前述の `/api-tv/session` で取得した cookie を利用します．
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: cookie
+          description: 前述の `/api-tv/session` で取得した cookie を利用します．
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: |
+          ログイン情報を送信します．
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                email:
+                  type: string
+                password:
+                  type: string
+      responses:
+        "200":
+          description: ログイン成功でも失敗でも，200 が返却されます．
+          headers:
+            Set-Cookie:
+              description: ログイン後のユーザが使用する access-token のほか，uuid, random, token の値が更新されます．
+              schema:
+                type: string
+                example: access-token=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx; uuid=xxxxxxxx-xxxx-xxxx-xxxx-xxxxxxxxxxxx; random=XXXXXXXXXXXXXXXXXXXXX; token=123456789876423456789;
+
+      operationId: login
+      tags:
+        - 認証
+
+  # 配信
+  /movies:
+    get:
+      summary: 配信/動画一覧を取得
+      parameters:
+        - name: is_live
+          in: query
+          description: 取得するものを生配信に限定するか
+          schema:
+            type: boolean
+        - name: is_upload
+          in: query
+          description: 取得するものを動画に限定するか
+          schema:
+            type: boolean
+        - name: onair_status
+          in: query
+          description: 配信状態を指定する．0=予約枠, 1=配信中, 2=VOD．
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+              - 2
+        - name: channel_ids
+          in: query
+          description: 特定のチャンネルのみに絞る
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+        - name: sort
+          in: query
+          description: 取得するデータの並び順を指定する
+          schema:
+            type: string
+            enum:
+              - total_views
+              - created_at
+              - -created_at
+              - schedule_at
+              - onair_status
+              - live_views
+              - total_yells
+              - -total_yells
+              - popularityP
+              - published_at
+              - -published_at
+              - a
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid status value
+      operationId: getMovies
+      tags:
+        - 配信
+
+  /movies/{movie_id}:
+    get:
+      summary: 配信/動画の情報を取得
+      description: |
+        `movie_id` で指定した任意の配信/動画の情報を取得する．この `movie_id` は配信/動画の URL のものです．例えば`https://www.openrec.tv/live/n9ze3m2w184` の `movie_id` は `n9ze3m2w184` です．
+        `movie_id` には，ユーザ ID を入れることも可能です．ユーザ ID を与えた場合は，そのユーザの最新の配信/動画の情報を取得します．
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid movie_id
+        "404":
+          description: Movie not found
+      operationId: getMovie
+      tags:
+        - 配信
+
+  /movies/{movie_id}/detail:
+    get:
+      summary: 動画ファイルのURLを含めた配信/動画の詳細情報を取得
+      description: |
+        `movie_id` で指定した任意の配信/動画の詳細情報を取得する．この `movie_id` は配信/動画の URL のものです．例えば`https://www.openrec.tv/live/n9ze3m2w184` の `movie_id` は `n9ze3m2w184` です．
+        Public API の `/movies/{movie_id}` とは異なり，こちらのエンドポイントでは，認証情報が必要ですが，レスポンスには動画ファイルの URL も含まれます．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid movie_id
+        "401":
+          description: Unauthorized
+        "404":
+          description: Movie not found
+      operationId: getMovieDetail
+      tags:
+        - 配信
+
+  /movies/{movie_id}/reports:
+    post:
+      summary: 配信/動画を通報
+      description: |
+        `movie_id` で指定した任意の配信/動画を通報します．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: |
+          `reason`: 通報理由．`1`=わいせつな表現．`2`=他者を誹謗中傷する表現．`3`=著作権の侵害．`4`=プライバシーの侵害．`5`=過激な暴力や自傷行為．`6`=なりすまし行為．`7`=出会いを誘導する行為．`8`=ねずみ講やマルチ商法．`9`=誤解を招く配信設定．`10`=ゲームの録画禁止区域の配信．`11`=改造版・海賊版ソフトの配信．`12`=政治的・宗教的・人種的な内容．`13`=その他の問題．
+
+          `message`: 通報内容．
+
+          `movie_id`: 動画 ID
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                reason:
+                  type: integer
+                  enum:
+                    - 1
+                    - 2
+                    - 3
+                    - 4
+                    - 5
+                    - 6
+                    - 7
+                    - 8
+                    - 9
+                    - 10
+                    - 11
+                    - 12
+                    - 13
+                message:
+                  type: string
+                movie_id:
+                  type: string
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid movie_id
+        "404":
+          description: Movie not found
+      operationId: getMovie
+      tags:
+        - 配信
+
+  /movies/{movie_id}/chats:
+    get:
+      summary: 配信のコメントを取得
+      description: |
+        `movie_id` で指定した任意の配信のコメントを取得します．
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+        - name: from_created_at
+          in: query
+          description: 指定した日時以降のコメントを取得
+          schema:
+            type: string
+            example: "2021-01-01T00:00:00Z"
+        - name: to_created_at
+          in: query
+          description: 指定した日時以前のコメントを取得．`from_created_at` と併用不可．
+          schema:
+            type: string
+            example: "2023-01-01T00:00:00Z"
+        - name: is_including_system_message
+          in: query
+          description: システムメッセージを含めるか (システムメッセージとは？詳細は不明)
+          schema:
+            type: boolean
+        - name: limit
+          in: query
+          description: 取得するコメントの最大数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 300
+            default: 40
+      responses:
+        "200":
+          description: 存在しない `movie_id` を指定した場合でも，200 が返却されます．
+      operationId: getMovieChats
+      tags:
+        - コメント
+
+    post:
+      summary: 配信にコメントを投稿
+      description: |
+        `movie_id` で指定した任意の配信にコメントを投稿します．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: |
+          `message`: コメント内容．100 文字以内．
+
+          `quality_type`: 超低遅延が ON の場合は 2，OFF の場合は 0．
+
+          `messaged_at`: コメントの投稿日時．
+
+          `league_key`: 詳細不明．基本的に空文字列．
+
+          `to_user_id`: コメントの宛先．エールのあて先を指定するときに使用？基本的に空文字列．
+
+          `consented_chat_terms`: チャット規約に同意しているか．基本的に false であるが，コメントルールで制限されているときは，true にする必要がある．
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                quality_type:
+                  type: integer
+                messaged_at:
+                  type: string
+                  example: "2024-05-22T22:21:59.985+09:00"
+                league_key:
+                  type: string
+                  example: ""
+                to_user_id:
+                  type: string
+                  example: ""
+                consented_chat_terms:
+                  type: boolean
+                  example: true
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: postMovieChat
+      tags:
+        - コメント
+
+  /movies/{movie_id}/chats/{chat_id}:
+    delete:
+      summary: 配信のコメントを削除
+      description: |
+        `movie_id` で指定した任意の配信の `chat_id` で指定したコメントを削除します．(自身のコメントのみ削除可能)
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+        - name: chat_id
+          in: path
+          description: コメント ID
+          required: true
+          schema:
+            type: integer
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: deleteMovieChat
+      tags:
+        - コメント
+
+  /movies/{movie_id}/comments:
+    get:
+      summary: 配信のアーカイブに POST されたコメントの取得
+      description: |
+        `movie_id` で指定した任意の配信のコメントを取得します．
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: 存在しない `movie_id` を指定した場合でも，200 が返却されます．
+      operationId: getMovieComments
+      tags:
+        - コメント
+
+    post:
+      summary: 配信のアーカイブにコメントを投稿
+      description: |
+        `movie_id` で指定した任意の配信にコメントを投稿します．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: |
+          `message`: コメント内容．100 文字以内．
+
+          `league_key`: 詳細不明．基本的に空文字列．
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                league_key:
+                  type: string
+                  example: ""
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: postMovieComment
+      tags:
+        - コメント
+
+  /movies/{movie_id}/comments/{comment_id}:
+    delete:
+      summary: 配信のアーカイブにコメントを削除
+      description: |
+        `movie_id` で指定した任意の配信の `comment_id` で指定したコメントを削除します．(自身のコメントのみ削除可能)
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+        - name: comment_id
+          in: path
+          description: コメント ID
+          required: true
+          schema:
+            type: integer
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: deleteMovieComment
+      tags:
+        - コメント
+
+  /movies/{movie_id}/comments/{comment_id}/replies:
+    post:
+      summary: 配信のアーカイブにコメントへの返信を投稿
+      description: |
+        `movie_id` で指定した任意の配信の `comment_id` で指定したコメントに返信を投稿します．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+        - name: comment_id
+          in: path
+          description: コメント ID
+          required: true
+          schema:
+            type: integer
+      requestBody:
+        description: |
+          `message`: コメント内容．100 文字以内．
+
+          `league_key`: 詳細不明．基本的に空文字列．
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                message:
+                  type: string
+                league_key:
+                  type: string
+                  example: ""
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: postMovieCommentReply
+      tags:
+        - コメント
+
+  /movies/{movie_id}/comments/{comment_id}/replies/{reply_id}:
+    delete:
+      summary: 配信のアーカイブにコメントへの返信を削除
+      description: |
+        `movie_id` で指定した任意の配信の `comment_id` で指定したコメントの `reply_id` で指定した返信を削除します．(自身のコメントのみ削除可能)
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: movie_id
+          in: path
+          description: 動画 ID
+          required: true
+          schema:
+            type: string
+        - name: comment_id
+          in: path
+          description: コメント ID
+          required: true
+          schema:
+            type: integer
+        - name: reply_id
+          in: path
+          description: 返信 ID
+          required: true
+          schema:
+            type: integer
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid Request
+      operationId: deleteMovieCommentReply
+      tags:
+        - コメント
+
+  # チャンネル
+  /channel-ranks:
+    get:
+      summary: チャンネルランキングを取得
+      parameters:
+        - name: period
+          in: query
+          description: ランキングの期間を指定する．`daily`=日間，`weekly`=週間，`monthly`=月間．
+          required: true
+          schema:
+            type: string
+            enum:
+              - daily
+              - weekly
+              - monthly
+        - name: date
+          in: query
+          description: ランキングの日付を指定する．`YYYYMM` 形式．`date` を指定する場合は，`period` を `monthly` にする必要があります．
+          schema:
+            type: string
+            example: "202304"
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getChannelRanks
+      tags:
+        - チャンネル
+
+  /popular-channels:
+    get:
+      summary: 人気チャンネルを取得
+      parameters:
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getPopularChannels
+      tags:
+        - チャンネル
+
+  /channels/{channel_id}:
+    get:
+      summary: チャンネル(ユーザ)情報を取得
+      description: |
+        `channel_id` で指定した任意のチャンネル(ユーザ)の情報を取得します．
+      parameters:
+        - name: channel_id
+          in: path
+          description: チャンネル ID
+          required: true
+          schema:
+            type: string
+            example: "indegnasen"
+      responses:
+        "200":
+          description: successful operation
+        "400":
+          description: Invalid channel_id
+        "404":
+          description: Channel not found
+      operationId: getChannel
+      tags:
+        - チャンネル
+
+  /subs-channels/{user_id}:
+    get:
+      summary: サブスク情報の取得
+      description: |
+        `user_id` で指定した任意のユーザのサブスク情報を取得します．
+      parameters:
+        - name: user_id
+          in: path
+          description: ユーザ ID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+      operationId: getSubsChannels
+      tags:
+        - チャンネル
+
+  /users/{user_id}/follows:
+    get:
+      summary: フォロー一覧の取得
+      description: |
+        `user_id` で指定した任意のユーザのフォロー一覧を取得します．
+      parameters:
+        - name: user_id
+          in: path
+          description: ユーザ ID
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getUserFollows
+      tags:
+        - チャンネル
+
+  /users/{user_id}/followers:
+    get:
+      summary: フォロワー一覧の取得
+      description: |
+        `user_id` で指定した任意のユーザのフォロワー一覧を取得します．
+      parameters:
+        - name: user_id
+          in: path
+          description: ユーザ ID
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getUserFollowers
+      tags:
+        - チャンネル
+
+  /ext-board/users/{user_id}/board-items:
+    get:
+      summary: ユーザのボード情報を取得
+      description: |
+        `user_id` で指定した任意のユーザのボード情報を取得します．
+      parameters:
+        - name: user_id
+          in: path
+          description: ユーザ ID
+          required: true
+          schema:
+            type: string
+        - name: board_type
+          in: query
+          description: ボードの種類
+          schema:
+            type: string
+            default: custom-board
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getUserBoardItems
+      tags:
+        - チャンネル
+
+  /search-users:
+    get:
+      summary: ユーザ検索
+      parameters:
+        - name: search_query
+          in: query
+          description: 検索クエリ
+          required: true
+          schema:
+            type: string
+        - name: channel_only
+          in: query
+          description: 配信者権限があるユーザのみに限定するか
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: searchUsers
+      tags:
+        - チャンネル
+
+  # 動画
+  /search-movies:
+    get:
+      summary: 任意のユーザの配信/動画の一覧を取得
+      parameters:
+        - name: channel_ids
+          in: query
+          description: 特定のチャンネルのみに絞る．指定しない場合は，OPENREC.tv 全体の配信/動画を検索．
+          schema:
+            type: string
+        - name: include_live
+          in: query
+          description: 生配信を含めるか
+          schema:
+            type: boolean
+            default: true
+        - name: onair_status
+          in: query
+          description: 配信状態を指定する．0=予約枠, 1=配信中, 2=VOD．指定しない場合はすべて．
+          schema:
+            type: integer
+            enum:
+              - 0
+              - 1
+              - 2
+        - name: include_deleted
+          in: query
+          description: 削除済みの動画を含めるか
+          schema:
+            type: boolean
+            default: true
+        - name: search_query
+          in: query
+          description: 検索クエリ
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: 取得するデータの並び順を指定する
+          schema:
+            type: string
+            enum:
+              - -published_at
+              - published_at
+              - total_views
+        - name: from_published_at
+          in: query
+          description: 指定した日時以降の配信/動画を取得する．指定しなかった場合は，2015年1月1日以降として扱われる．
+          schema:
+            type: string
+            default: ""
+            example: "2024-04-30T15:00:00Z"
+        - name: to_published_at
+          in: query
+          description: 指定した日時以前の配信/動画を取得．指定しなかった場合は，現在の日付までとして扱われる．
+          schema:
+            type: string
+            default: ""
+            example: "2024-05-30T15:00:00Z"
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: searchMovies
+      tags:
+        - 動画
+
+  /playlists:
+    get:
+      summary: プレイリスト一覧を取得
+      parameters:
+        - name: create_user_id
+          in: query
+          description: playリスト作成者のユーザ ID
+          schema:
+            type: string
+        - name: playlist_type
+          in: query
+          description: プレイリストの種類
+          schema:
+            type: string
+            enum:
+              - movie
+              - capture
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getPlaylists
+      tags:
+        - 動画
+
+  # キャプチャ
+  /capture-ranks:
+    get:
+      summary: キャプチャランキングを取得
+      parameters:
+        - name: period
+          in: query
+          description: ランキングの期間を指定する．`daily`=日間，`weekly`=週間，`monthly`=月間．
+          required: true
+          schema:
+            type: string
+            enum:
+              - daily
+              - weekly
+              - monthly
+        - name: date
+          in: query
+          description: ランキング対象の期間を `YYYYMM` 形式で指定する．このパラメータを指定した場合， `period` で 指定したパラメータによらず，月間ランキングとなる．
+          schema:
+            type: string
+            example: "202304"
+        - name: channel_id
+          in: query
+          description: 取得対象のキャプチャの配信者を指定する．指定しない場合は，OPENREC.tv 全体となる．
+          schema:
+            type: string
+        - name: is_channel_unique
+          in: query
+          description: チャンネルごとのランキングを取得するか
+          schema:
+            type: boolean
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getCaptureRanks
+      tags:
+        - キャプチャ
+
+  /captures:
+    get:
+      summary: 特定のチャンネルや配信のキャプチャを取得
+      parameters:
+        - name: channel_id
+          in: query
+          description: 特定のチャンネルのみに絞る
+          schema:
+            type: string
+        - name: movie_id
+          in: query
+          description: 特定の配信のキャプチャを取得
+          schema:
+            type: string
+        - name: movie_ids
+          in: query
+          description: 取得対象のキャプチャの元となる配信の ID を指定する．
+          schema:
+            type: string
+        - name: sort
+          in: query
+          description: 取得するデータの並び順を指定する
+          schema:
+            type: string
+            enum:
+              - views
+              - public_at
+        - name: sort_direction
+          in: query
+          description: ソートの方向を指定する．
+          schema:
+            type: string
+            enum:
+              - ASC
+              - DESC
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getCaptures
+      tags:
+        - キャプチャ
+
+  /captures/{capture_id}:
+    get:
+      summary: キャプチャの情報を取得
+      description: |
+        `capture_id` で指定した任意のキャプチャの情報を取得します．
+      parameters:
+        - name: capture_id
+          in: path
+          description: キャプチャ ID
+          required: true
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+        "404":
+          description: Capture not found
+      operationId: getCapture
+      tags:
+        - キャプチャ
+
+  /reactions:
+    post:
+      summary: キャプチャにリアクションを送信
+      description: |
+        `capture_id` で指定した任意のキャプチャにリアクションを送信します．
+      servers:
+        - url: https://apiv5.openrec.tv/everyone/api/v5
+          description: OPENREC.tv Auth API
+      parameters:
+        - name: random
+          in: header
+          description: |
+            `/api-tv/session` で得られた random の値
+          required: true
+          schema:
+            type: string
+        - name: token
+          in: header
+          description: |
+            `/api-tv/session` で得られた token の値
+          required: true
+          schema:
+            type: string
+        - name: uuid
+          in: header
+          description: |
+            `/api-tv/session` で得られた uuid の値
+          required: true
+          schema:
+            type: string
+      requestBody:
+        description: |
+          `target_id`: キャプチャ ID
+
+          `target_type`: キャプチャの種類．`capture` で固定(?)．
+
+          `reaction_id`: リアクションの種類． `arara`, `bikkuri`, `gg`, `hatena`, `kakke`, `kami`, `kansya`, `kawaii`, `kusa`, `music`, `nice`, `odoroki`, `sugo`, `tsuyo`, `umai`, `wakuwaku`, `wara`, `yaba` のいずれか．
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              properties:
+                target_id:
+                  type: string
+                target_type:
+                  type: string
+                  example: "capture"
+                reaction_id:
+                  type: string
+                  enum:
+                    - arara
+                    - bikkuri
+                    - gg
+                    - hatena
+                    - kakke
+                    - kami
+                    - kansya
+                    - kawaii
+                    - kusa
+                    - music
+                    - nice
+                    - odoroki
+                    - sugo
+                    - tsuyo
+                    - umai
+                    - wakuwaku
+                    - wara
+                    - yaba
+      responses:
+        "200":
+          description: successful operation
+      operationId: postReaction
+      tags:
+        - キャプチャ
+
+  # エール
+  /yell-ranks:
+    get:
+      summary: エールランキングを取得
+      parameters:
+        - name: movie_id
+          in: query
+          description: 任意の配信のエールランキングを取得
+          schema:
+            type: string
+        - name: user_id
+          in: query
+          description: ユーザ ID．`movie_id` と排他的．
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getYellRanks
+      tags:
+        - エール
+
+  /yell-logs:
+    get:
+      summary: 時系列順のエールを取得
+      parameters:
+        - name: movie_id
+          in: query
+          description: 指定した配信のエールログを取得
+          required: true
+          schema:
+            type: string
+        - name: page
+          in: query
+          description: ページ番号
+          schema:
+            type: integer
+            minimum: 1
+            default: 1
+      responses:
+        "200":
+          description: successful operation
+      operationId: getYellLogs
+      tags:
+        - エール
+
+  # 使用中のアカウントに関する情報
+  /users/me:
+    get:
+      summary: 自分のユーザ情報を取得
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      security:
+        - uuid: []
+        - access-token: []
+      responses:
+        "200":
+          description: successful operation
+      operationId: getMe
+      tags:
+        - ログイン中ユーザ
+
+  /users/me/timelines/movies:
+    get:
+      summary: 自分のタイムラインに表示される配信/動画の一覧を取得
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      security:
+        - uuid: []
+        - access-token: []
+      parameters:
+        - name: onair_status
+          in: query
+          description: 配信状態を指定する．1=配信中, 2=VOD．
+          schema:
+            type: integer
+            enum:
+              - 1
+              - 2
+        - name: limit
+          in: query
+          description: 取得するデータの最大数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 40
+        - name: include_upload
+          in: query
+          description: ??
+          schema:
+            type: boolean
+        - name: until_timeline_key
+          in: query
+          description: |
+            `until_timeline_key` には，前回のレスポンスに含まれる `last_timeline_key` を指定することで，次のページを取得することができる．
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+      operationId: getMyTimelineMovies
+      tags:
+        - ログイン中ユーザ
+
+  /users/me/timeline-movies/comingups:
+    get:
+      summary: 自分のタイムラインに表示される予約枠の一覧を取得
+      description: 予約枠の一覧の取得には，`/users/me/timelines/movies` ではなく，`/users/me/timeline-movies/comingups` を使用します．
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      security:
+        - uuid: []
+        - access-token: []
+      parameters:
+        - name: limit
+          in: query
+          description: 取得するデータの最大数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 40
+        - name: offset
+          in: query
+          description: 取得するデータのオフセット
+          schema:
+            type: integer
+            minimum: 0
+            default: 0
+      responses:
+        "200":
+          description: successful operation
+      operationId: getMyTimelineMoviesComingups
+      tags:
+        - ログイン中ユーザ
+
+  /users/me/timelines/board-items:
+    get:
+      summary: 自分のタイムラインに表示されるボード情報を取得
+      servers:
+        - url: https://apiv5.openrec.tv/api/v5/
+          description: OPENREC.tv Auth API
+      security:
+        - uuid: []
+        - access-token: []
+      parameters:
+        - name: limit
+          in: query
+          description: 取得するデータの最大数
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 40
+        - name: from_created_at
+          in: query
+          description: 指定した日時以降のボード情報を取得．ISO 8601 形式で指定する．
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+      operationId: getMyTimelineBoardItems
+      tags:
+        - ログイン中ユーザ
+
+  # OPENREC.tv に関する情報
+  /spotlights:
+    get:
+      summary: OPENREC.tv トップページに載っている情報を取得
+      parameters:
+        - name: device_type
+          in: query
+          description: デバイスの種類．
+          required: true
+          schema:
+            type: string
+            enum:
+              - web
+              - android
+              - ios
+      responses:
+        "200":
+          description: successful operation
+      operationId: getSpotlight
+      tags:
+        - OPENREC.tv に関する情報
+
+  /informations:
+    get:
+      summary: OPENREC.tv からのお知らせを取得
+      parameters:
+        - name: device_type
+          in: query
+          description: デバイスの種類．
+          required: true
+          schema:
+            type: string
+            enum:
+              - web
+              - android
+              - ios
+        - name: user_type
+          in: query
+          description: ユーザの種類．用途不明
+          schema:
+            type: string
+        - name: group_key
+          in: query
+          description: グループキー．用途不明．`information_top`
+          schema:
+            type: string
+      responses:
+        "200":
+          description: successful operation
+      operationId: getInformations
+      tags:
+        - OPENREC.tv に関する情報
+
+components:
+  securitySchemes:
+    uuid:
+      type: apiKey
+      in: header
+      name: uuid
+      description: uuid の取得は `/login` で行います．
+    access-token:
+      type: apiKey
+      in: header
+      name: access-token
+      description: access-token の取得も `/login` で行います．
